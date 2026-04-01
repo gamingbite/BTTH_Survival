@@ -170,7 +170,35 @@ public class WaveManager : MonoBehaviour
     {
         isSpawning = true;
         
-        for (int i = 0; i < count; i++)
+        // Tính toán số lượng Ranged và Melee để đảm bảo luôn có đủ 2 loại
+        int rangedToSpawn = 0;
+        int meleeToSpawn = count;
+
+        if (count >= 2 && rangedPrefabs != null && rangedPrefabs.Length > 0 && meleePrefabs != null && meleePrefabs.Length > 0)
+        {
+            float percentRanged = GetRangedChance();
+            rangedToSpawn = Mathf.Max(1, Mathf.RoundToInt(count * percentRanged));
+            
+            // Đảm bảo chừa ít nhất 1 chỗ cho Melee
+            rangedToSpawn = Mathf.Min(rangedToSpawn, count - 1);
+            meleeToSpawn = count - rangedToSpawn;
+        }
+
+        // Tạo danh sách loại quái sẽ spawn và trộn ngẫu nhiên
+        List<bool> spawnList = new List<bool>();
+        for (int i = 0; i < rangedToSpawn; i++) spawnList.Add(true);
+        for (int i = 0; i < meleeToSpawn; i++) spawnList.Add(false);
+
+        // Trộn (Shuffle) danh sách
+        for (int i = 0; i < spawnList.Count; i++)
+        {
+            int rnd = Random.Range(i, spawnList.Count);
+            bool temp = spawnList[i];
+            spawnList[i] = spawnList[rnd];
+            spawnList[rnd] = temp;
+        }
+
+        for (int i = 0; i < spawnList.Count; i++)
         {
             // Chờ nếu đã đạt max enemy cùng lúc
             while (enemiesAlive >= maxEnemiesAtOnce)
@@ -178,7 +206,7 @@ public class WaveManager : MonoBehaviour
                 yield return new WaitForSeconds(0.5f);
             }
 
-            SpawnOneEnemy();
+            SpawnOneEnemy(spawnList[i]);
             enemiesToSpawn--;
             
             yield return new WaitForSeconds(spawnDelay);
@@ -187,28 +215,25 @@ public class WaveManager : MonoBehaviour
         isSpawning = false;
     }
 
-    void SpawnOneEnemy()
+    void SpawnOneEnemy(bool isRanged)
     {
         if (spawnPoints == null || spawnPoints.Length == 0) return;
 
         Transform pt = spawnPoints[Random.Range(0, spawnPoints.Length)];
         if (pt == null) return;
 
-        // Quyết định spawn melee hay ranged
-        bool shouldSpawnRanged = currentWave >= rangedStartWave 
-                                 && rangedPrefabs.Length > 0 
-                                 && Random.value < GetRangedChance();
+        GameObject prefab = null;
 
-        GameObject prefab;
-        if (shouldSpawnRanged)
+        if (isRanged && rangedPrefabs != null && rangedPrefabs.Length > 0)
         {
             prefab = rangedPrefabs[Random.Range(0, rangedPrefabs.Length)];
         }
-        else
+        else if (meleePrefabs != null && meleePrefabs.Length > 0)
         {
-            if (meleePrefabs.Length == 0) return;
             prefab = meleePrefabs[Random.Range(0, meleePrefabs.Length)];
         }
+
+        if (prefab == null) return;
 
         // Spawn với offset ngẫu nhiên nhỏ
         Vector3 spawnPos = pt.position + new Vector3(Random.Range(-0.5f, 0.5f), Random.Range(-0.3f, 0.3f), 0);
@@ -242,8 +267,8 @@ public class WaveManager : MonoBehaviour
 
     float GetRangedChance()
     {
-        // Wave 3: 20%, Wave 5: 30%, Wave 10: 50%, capped at 60%
-        return Mathf.Clamp(0.2f + (currentWave - rangedStartWave) * 0.05f, 0.2f, 0.6f);
+        // Tăng dần tỷ lệ ranged theo từng wave (tối thiểu 20%, tối đa 60%)
+        return Mathf.Clamp(0.2f + (currentWave - 1) * 0.05f, 0.2f, 0.6f);
     }
 
     // ─── Gọi từ enemy khi chết ────────────────────────────────────

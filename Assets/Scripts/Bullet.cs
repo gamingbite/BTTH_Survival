@@ -37,6 +37,8 @@ public class Bullet : MonoBehaviour
 
     void IgnorePlayerCollision()
     {
+        if (isEnemyBullet) return; // Không bỏ qua va chạm với Player nếu đây là đạn của quái
+
         GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
         if (playerObj == null) playerObj = GameObject.Find("Player");
         if (playerObj != null)
@@ -59,12 +61,17 @@ public class Bullet : MonoBehaviour
 
     void Update()
     {
-        if (hasHit || isEnemyBullet) return;
+        if (hasHit) return;
         
         // ═══ BACKUP: Raycast + Overlap detection ═══
-        // Dùng OverlapCircle để detect va chạm thủ công, phòng trường hợp
-        // OnTriggerEnter2D không fire (do physics timing, fast moving, etc.)
-        DetectEnemyManually();
+        if (isEnemyBullet)
+        {
+            DetectPlayerManually();
+        }
+        else
+        {
+            DetectEnemyManually();
+        }
     }
 
     void DetectEnemyManually()
@@ -95,6 +102,32 @@ public class Bullet : MonoBehaviour
             }
         }
     }
+
+    void DetectPlayerManually()
+    {
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, hitRadius);
+        foreach (var hit in hits)
+        {
+            if (hit == myCollider) continue; // Bỏ qua chính mình
+            
+            PlayerController player = hit.GetComponent<PlayerController>();
+            if (player != null)
+            {
+                Debug.Log($"[Bullet] OverlapCircle HIT Player! Dmg={damage}");
+                ApplyDamageToPlayer(player);
+                return;
+            }
+        }
+    }
+
+    void ApplyDamageToPlayer(PlayerController player)
+    {
+        if (hasHit) return;
+        hasHit = true;
+        player.TakeDamage(damage, transform);
+        DestroyBullet();
+    }
+
 
     public void SetDirection(Vector2 direction)
     {
@@ -148,7 +181,7 @@ public class Bullet : MonoBehaviour
             PlayerController player = hitObject.GetComponent<PlayerController>();
             if (player != null)
             {
-                player.TakeDamage(damage);
+                player.TakeDamage(damage, transform);
                 DestroyBullet();
             }
             return;

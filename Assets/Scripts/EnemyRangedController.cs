@@ -28,6 +28,7 @@ public class EnemyRangedController : MonoBehaviour
     private bool isFacingRight = true;
     private float nextFireTime = 0f;
     private bool isDead = false;
+    private Rigidbody2D rb;
 
     private Animator anim;
     private SpriteRenderer sr;
@@ -43,6 +44,18 @@ public class EnemyRangedController : MonoBehaviour
         currentHealth = maxHealth;
         anim = GetComponent<Animator>();
         sr = GetComponent<SpriteRenderer>();
+
+        rb = GetComponent<Rigidbody2D>();
+        if (rb != null)
+        {
+            rb.bodyType = RigidbodyType2D.Dynamic;
+            rb.freezeRotation = true;
+            rb.gravityScale = 0f;
+            rb.mass = 50f; // Trọng lượng lớn để người chơi khó đẩy
+        }
+        
+        Collider2D col = GetComponent<Collider2D>();
+        if (col != null) col.isTrigger = false;
 
         // Tìm player
         GameObject playerObj = GameObject.FindGameObjectWithTag("Player");
@@ -89,16 +102,18 @@ public class EnemyRangedController : MonoBehaviour
     // ─── Chase ─────────────────────────────────────────────────────
     void ChasePlayer()
     {
-        transform.position = Vector2.MoveTowards(
-            transform.position,
-            player.position,
-            moveSpeed * Time.deltaTime
-        );
+        if (rb != null)
+        {
+            Vector2 direction = (player.position - transform.position).normalized;
+            rb.linearVelocity = direction * moveSpeed;
+        }
     }
 
     // ─── Shoot ─────────────────────────────────────────────────────
     void ShootAtPlayer()
     {
+        if (rb != null) rb.linearVelocity = Vector2.zero;
+
         // Đứng yên, bắn theo fireRate
         if (Time.time >= nextFireTime)
         {
@@ -106,6 +121,24 @@ public class EnemyRangedController : MonoBehaviour
             nextFireTime = Time.time + fireRate;
         }
     }
+
+    private bool isFacingLeft = true;
+
+    void FlipTowardPlayer()
+    {
+        bool playerIsOnRight = player.position.x > transform.position.x;
+        if (playerIsOnRight && isFacingLeft)
+        {
+            isFacingLeft = false;
+            transform.rotation = Quaternion.Euler(0, 180, 0);
+        }
+        else if (!playerIsOnRight && !isFacingLeft)
+        {
+            isFacingLeft = true;
+            transform.rotation = Quaternion.Euler(0, 0, 0);
+        }
+    }
+
 
     void FireBullet()
     {
@@ -115,28 +148,34 @@ public class EnemyRangedController : MonoBehaviour
         if (AudioManager.Instance != null) AudioManager.Instance.PlayShoot();
         
         // Bắn thẳng ngang theo hướng nhìn (trái/phải)
-        Vector2 direction = isFacingRight ? Vector2.right : Vector2.left;
+        Vector2 direction = isFacingLeft ? Vector2.left : Vector2.right;
         GameObject bullet = Instantiate(bulletPrefab, firePoint.position, Quaternion.identity);
 
-        EnemyBullet bulletScript = bullet.GetComponent<EnemyBullet>();
-        if (bulletScript != null)
+        EnemyBullet enemyBulletScript = bullet.GetComponent<EnemyBullet>();
+        Bullet commonBullet = bullet.GetComponent<Bullet>();
+        
+        if (enemyBulletScript != null)
         {
-            bulletScript.SetDirection(direction);
+            enemyBulletScript.SetDirection(direction);
         }
+        else if (commonBullet != null)
+        {
+            commonBullet.isEnemyBullet = true;
+            commonBullet.SetDirection(direction);
+        }
+        else
+        {
+            Rigidbody2D bulletRb = bullet.GetComponent<Rigidbody2D>();
+            if (bulletRb == null) bulletRb = bullet.AddComponent<Rigidbody2D>();
+            bulletRb.gravityScale = 0;
+            bulletRb.linearVelocity = direction * 10f;
+        }
+
+        Destroy(bullet, 3f);
     }
 
     // ─── Flip ──────────────────────────────────────────────────────
-    void FlipTowardPlayer()
-    {
-        bool shouldFaceRight = player.position.x > transform.position.x;
-        if (shouldFaceRight != isFacingRight)
-        {
-            isFacingRight = shouldFaceRight;
-            Vector3 s = transform.localScale;
-            s.x *= -1;
-            transform.localScale = s;
-        }
-    }
+
 
     // ─── Health ────────────────────────────────────────────────────
     public void TakeDamage(int damage)
@@ -145,8 +184,7 @@ public class EnemyRangedController : MonoBehaviour
         
         currentHealth -= damage;
         
-        // Hiệu ứng
-        DamageNumber.Spawn(transform.position, damage);
+        // Chỉ cập nhật HP Bar, TẮT hiển thị số sát thương
         if (hpBar != null) hpBar.UpdateHP(currentHealth);
         if (AudioManager.Instance != null) AudioManager.Instance.PlayHit();
         
@@ -228,6 +266,16 @@ public class EnemyRangedController : MonoBehaviour
     public int contactDamage = 5;
 
     void OnCollisionEnter2D(Collision2D coll)
+    {
+        if (isDead) return;
+        if (coll.gameObject.CompareTag("Player"))
+        {
+            PlayerController p = coll.gameObject.GetComponent<PlayerController>();
+            if (p != null) p.TakeDamage(contactDamage);
+        }
+    }
+
+    void OnTriggerEnter2D(Collider2D coll)
     {
         if (isDead) return;
         if (coll.gameObject.CompareTag("Player"))

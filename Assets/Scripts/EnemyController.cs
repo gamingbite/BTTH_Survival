@@ -17,6 +17,7 @@ public class EnemyController : MonoBehaviour
     [HideInInspector] public int currentHealth;
     private Transform player;
     private bool isFacingLeft = true;
+    private Rigidbody2D rb;
     
     private Animator anim;
     private SpriteRenderer sr;
@@ -25,6 +26,7 @@ public class EnemyController : MonoBehaviour
 
     private float nextAttackTime = 0f;
     public float attackCooldown = 1.25f;
+    private bool isAttacking = false;
 
     void Start()
     {
@@ -32,12 +34,17 @@ public class EnemyController : MonoBehaviour
         sr = GetComponent<SpriteRenderer>();
         currentHealth = maxHealth;
         
-        Rigidbody2D rb = GetComponent<Rigidbody2D>();
+        rb = GetComponent<Rigidbody2D>();
         if (rb != null)
         {
             rb.freezeRotation = true;
             rb.gravityScale = 0f;
+            rb.bodyType = RigidbodyType2D.Dynamic;
+            rb.mass = 50f; // Trọng lượng lớn để Player khó đẩy
         }
+
+        Collider2D col = GetComponent<Collider2D>();
+        if (col != null) col.isTrigger = false;
         
         if (firePoint == null)
             firePoint = transform.Find("FirePoint");
@@ -62,6 +69,7 @@ public class EnemyController : MonoBehaviour
         if (player == null)
         {
             if (anim != null) anim.SetBool("isWalking", false);
+            if (rb != null) rb.linearVelocity = Vector2.zero;
             return;
         }
 
@@ -70,17 +78,24 @@ public class EnemyController : MonoBehaviour
 
         if (distance > attackRange)
         {
-            transform.position = Vector2.MoveTowards(transform.position, player.position, moveSpeed * Time.deltaTime);
-            if (anim != null) anim.SetBool("isWalking", true);
+            if (!isAttacking)
+            {
+                if (rb != null) rb.linearVelocity = direction * moveSpeed;
+                if (anim != null) anim.SetBool("isWalking", true);
+            }
+            else
+            {
+                if (rb != null) rb.linearVelocity = Vector2.zero;
+            }
         }
         else
         {
-            if (anim != null) anim.SetBool("isWalking", false);
+            if (rb != null) rb.linearVelocity = Vector2.zero;
+            if (anim != null && !isAttacking) anim.SetBool("isWalking", false);
             
-            if (Time.time >= nextAttackTime)
+            if (!isAttacking && Time.time >= nextAttackTime)
             {
-                AttackPlayer();
-                nextAttackTime = Time.time + attackCooldown;
+                StartCoroutine(AttackRoutine());
             }
         }
 
@@ -97,64 +112,86 @@ public class EnemyController : MonoBehaviour
         }
     }
 
-    void AttackPlayer()
+    IEnumerator AttackRoutine()
     {
+        isAttacking = true;
         if (anim != null) anim.SetTrigger("Attack");
+        
+        // Wait for the attack animation to reach the striking frame (e.g. 0.4s)
+        yield return new WaitForSeconds(0.4f);
+        
+        if (isDead) 
+        {
+            isAttacking = false;
+            yield break;
+        }
+
         if (AudioManager.Instance != null) AudioManager.Instance.PlayPunch();
         
-        if (isRanged)
+        // Check if player is still roughly in range, or just attack anyway
+        float distance = player != null ? Vector2.Distance(transform.position, player.position) : 999f;
+        if (distance <= attackRange + 1.5f || isRanged)
         {
-            Vector3 spawnPos = firePoint != null ? firePoint.position : transform.position;
-            
-            if (projectilePrefab != null)
+            if (isRanged)
             {
-                GameObject bullet = Instantiate(projectilePrefab, spawnPos, Quaternion.identity);
+                Vector3 spawnPos = firePoint != null ? firePoint.position : transform.position;
                 
-                Vector2 shootDir = isFacingLeft ? Vector2.left : Vector2.right;
-                
-                Bullet bulletScript = bullet.GetComponent<Bullet>();
-                EnemyBullet enemyBulletScript = bullet.GetComponent<EnemyBullet>();
+                if (projectilePrefab != null)
+                {
+                    GameObject bullet = Instantiate(projectilePrefab, spawnPos, Quaternion.identity);
+                    
+                    Vector2 shootDir = isFacingLeft ? Vector2.left : Vector2.right;
+                    
+                    Bullet bulletScript = bullet.GetComponent<Bullet>();
+                    EnemyBullet enemyBulletScript = bullet.GetComponent<EnemyBullet>();
 
-                if (enemyBulletScript != null)
-                {
-                    enemyBulletScript.SetDirection(shootDir);
-                }
-                else if (bulletScript != null)
-                {
-                    bulletScript.isEnemyBullet = true;
-                    bulletScript.SetDirection(shootDir);
+                    if (enemyBulletScript != null)
+                    {
+                        enemyBulletScript.SetDirection(shootDir);
+                    }
+                    else if (bulletScript != null)
+                    {
+                        bulletScript.isEnemyBullet = true;
+                        bulletScript.SetDirection(shootDir);
+                    }
+                    else
+                    {
+                        Rigidbody2D rb = bullet.GetComponent<Rigidbody2D>();
+                        if (rb == null) rb = bullet.AddComponent<Rigidbody2D>();
+                        rb.gravityScale = 0;
+                        rb.linearVelocity = shootDir * projectileSpeed;
+                    }
+                    
+                    Destroy(bullet, 3f);
                 }
                 else
                 {
-                    Rigidbody2D rb = bullet.GetComponent<Rigidbody2D>();
-                    if (rb == null) rb = bullet.AddComponent<Rigidbody2D>();
-                    rb.gravityScale = 0;
-                    rb.linearVelocity = shootDir * projectileSpeed;
+                    if (player != null)
+                    {
+                        PlayerController playerScript = player.GetComponent<PlayerController>();
+                        if (playerScript != null) playerScript.TakeDamage(damageToPlayer, transform);
+                    }
                 }
-                
-                Destroy(bullet, 3f);
             }
             else
             {
+                // CẬN CHIẾN
                 if (player != null)
                 {
                     PlayerController playerScript = player.GetComponent<PlayerController>();
-                    if (playerScript != null) playerScript.TakeDamage(damageToPlayer);
+                    if (playerScript != null)
+                    {
+                        playerScript.TakeDamage(damageToPlayer, transform);
+                    }
                 }
             }
         }
-        else
-        {
-            // CẬN CHIẾN
-            if (player != null)
-            {
-                PlayerController playerScript = player.GetComponent<PlayerController>();
-                if (playerScript != null)
-                {
-                    playerScript.TakeDamage(damageToPlayer);
-                }
-            }
-        }
+
+        // Wait a bit more for animation to finish
+        yield return new WaitForSeconds(0.4f);
+        
+        nextAttackTime = Time.time + attackCooldown;
+        isAttacking = false;
     }
 
     public void TakeDamage(int damage)
@@ -163,8 +200,7 @@ public class EnemyController : MonoBehaviour
         
         currentHealth -= damage;
         
-        // Hiệu ứng
-        DamageNumber.Spawn(transform.position, damage);
+        // Chỉ cập nhật HP Bar, TẮT hiển thị số sát thương
         if (hpBar != null) hpBar.UpdateHP(currentHealth);
         if (AudioManager.Instance != null) AudioManager.Instance.PlayHit();
         
@@ -240,5 +276,31 @@ public class EnemyController : MonoBehaviour
             yield return null;
         }
         Destroy(gameObject);
+    }
+
+    void OnCollisionStay2D(Collision2D coll)
+    {
+        if (isDead) return;
+        if (coll.gameObject.CompareTag("Player"))
+        {
+            if (!isAttacking && Time.time >= nextAttackTime)
+            {
+                if (anim != null) anim.SetBool("isWalking", false);
+                StartCoroutine(AttackRoutine());
+            }
+        }
+    }
+
+    void OnTriggerStay2D(Collider2D coll)
+    {
+        if (isDead) return;
+        if (coll.gameObject.CompareTag("Player"))
+        {
+            if (!isAttacking && Time.time >= nextAttackTime)
+            {
+                if (anim != null) anim.SetBool("isWalking", false);
+                StartCoroutine(AttackRoutine());
+            }
+        }
     }
 }

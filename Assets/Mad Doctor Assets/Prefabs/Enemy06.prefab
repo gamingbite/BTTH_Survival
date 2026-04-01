@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 805622364655150298}
   - component: {fileID: 7992781292913513106}
   - component: {fileID: 8311823836950548134}
-  - component: {fileID: 8719351189851449339}
+  - component: {fileID: 779835166980360332}
   m_Layer: 0
   m_Name: Enemy06
   m_TagString: Enemy
@@ -191,7 +191,7 @@ Animator:
   m_AllowConstantClipSamplingOptimization: 1
   m_KeepAnimatorStateOnDisable: 0
   m_WriteDefaultValuesOnDisable: 0
---- !u!114 &8719351189851449339
+--- !u!114 &779835166980360332
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -200,19 +200,16 @@ MonoBehaviour:
   m_GameObject: {fileID: 5075516757545464809}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5146b514c0473fe4a91207c346e20f0e, type: 3}
+  m_Script: {fileID: 11500000, guid: ebaf742fae8cc4848b76ee7fb2180249, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyController
-  moveSpeed: 1.2
-  maxHealth: 100
-  damageToPlayer: 25
-  attackRange: 0.8
-  isRanged: 0
-  projectilePrefab: {fileID: 0}
+  m_EditorClassIdentifier: Assembly-CSharp::EnemyRangedController
+  maxHealth: 60
+  moveSpeed: 3.2
+  stopRange: 6
+  fireRate: 1.2
+  bulletPrefab: {fileID: 6511283089426973295, guid: f07bd7799c40fe143a8482ef9db6bbb0, type: 3}
   firePoint: {fileID: 0}
-  projectileSpeed: 10
-  currentHealth: 0
-  attackCooldown: 1.25
+  contactDamage: 5
 --- !u!1 &7611060703337546540
 GameObject:
   m_ObjectHideFlags: 0

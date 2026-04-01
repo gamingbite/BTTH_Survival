@@ -14,6 +14,13 @@ public class PlayerController : MonoBehaviour
     private bool isDead = false;
 
     [Header("Map Boundaries")]
+    [Tooltip("Check this to manually input the map bounds below.")]
+    public bool useCustomBounds = false;
+    public float customMinX = -8.5f;
+    public float customMaxX = 8.5f;
+    public float customMinY = -4.5f;
+    public float customMaxY = 4.5f;
+    
     public SpriteRenderer mapBackground;
     private float minX, maxX, minY, maxY;
 
@@ -31,28 +38,42 @@ public class PlayerController : MonoBehaviour
         weaponManager = GetComponent<WeaponManager>();
         playerAnim = GetComponent<PlayerAnimation>();
         currentHealth = maxHealth;
+        
+        // Update UI at start
+        if (GameManager.Instance != null)
+            GameManager.Instance.UpdateHP(currentHealth, maxHealth);
 
-        if (mapBackground == null)
+        if (useCustomBounds)
         {
-            GameObject bgObj = GameObject.Find("Background");
-            if (bgObj != null)
-                mapBackground = bgObj.GetComponent<SpriteRenderer>();
-        }
-
-        if (mapBackground != null)
-        {
-            float playerWidth = GetComponent<SpriteRenderer>().bounds.extents.x;
-            float playerHeight = GetComponent<SpriteRenderer>().bounds.extents.y;
-
-            minX = mapBackground.bounds.min.x + playerWidth;
-            maxX = mapBackground.bounds.max.x - playerWidth;
-            minY = mapBackground.bounds.min.y + playerHeight;
-            maxY = mapBackground.bounds.max.y - playerHeight;
+            minX = customMinX;
+            maxX = customMaxX;
+            minY = customMinY;
+            maxY = customMaxY;
         }
         else
         {
-            minX = -8.5f; maxX = 8.5f;
-            minY = -4.5f; maxY = 4.5f;
+            if (mapBackground == null)
+            {
+                GameObject bgObj = GameObject.Find("Background");
+                if (bgObj != null)
+                    mapBackground = bgObj.GetComponent<SpriteRenderer>();
+            }
+
+            if (mapBackground != null)
+            {
+                float playerWidth = GetComponent<SpriteRenderer>().bounds.extents.x;
+                float playerHeight = GetComponent<SpriteRenderer>().bounds.extents.y;
+
+                minX = mapBackground.bounds.min.x + playerWidth;
+                maxX = mapBackground.bounds.max.x - playerWidth;
+                minY = mapBackground.bounds.min.y + playerHeight;
+                maxY = mapBackground.bounds.max.y - playerHeight;
+            }
+            else
+            {
+                minX = -8.5f; maxX = 8.5f;
+                minY = -4.5f; maxY = 4.5f;
+            }
         }
     }
 
@@ -91,6 +112,8 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    private bool isKnockedBack = false;
+
     void FixedUpdate()
     {
         if (isDead)
@@ -99,7 +122,10 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        rb.linearVelocity = movement.normalized * moveSpeed;
+        if (!isKnockedBack)
+        {
+            rb.linearVelocity = movement.normalized * moveSpeed;
+        }
 
         Vector2 clampedPosition = rb.position;
         clampedPosition.x = Mathf.Clamp(clampedPosition.x, minX, maxX);
@@ -117,7 +143,7 @@ public class PlayerController : MonoBehaviour
         if (weaponManager != null) weaponManager.UpdateWeaponDirection(isFacingRight);
     }
 
-    public void TakeDamage(int damage)
+    public void TakeDamage(int damage, Transform attacker = null)
     {
         if (isDead) return;
         
@@ -125,8 +151,55 @@ public class PlayerController : MonoBehaviour
         currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
         if (GameManager.Instance != null)
             GameManager.Instance.UpdateHP(currentHealth, maxHealth);
-        if (currentHealth <= 0) Die();
+            
+        if (currentHealth <= 0) 
+        {
+            Die();
+        }
+        else
+        {
+            StartCoroutine(HitEffect(attacker));
+        }
     }
+
+    private System.Collections.IEnumerator HitEffect(Transform attacker)
+    {
+        SpriteRenderer sr = GetComponent<SpriteRenderer>();
+        Color originalColor = Color.white;
+        if (sr != null)
+        {
+            originalColor = sr.color;
+            sr.color = new Color(1f, 0.3f, 0.3f);
+        }
+
+        if (attacker != null && rb != null)
+        {
+            isKnockedBack = true;
+            Vector2 knockbackDir = (transform.position - attacker.position).normalized;
+            if (knockbackDir == Vector2.zero) knockbackDir = Random.insideUnitCircle.normalized;
+            
+            // Giảm độ giật lùi xuống rất nhẹ (còn khoảng 3.5 thay vì 8)
+            rb.linearVelocity = knockbackDir * 3.5f;
+        }
+
+        // Thời gian bị khựng ngắt quãng càng ngắn càng mượt
+        yield return new WaitForSeconds(0.1f);
+
+        if (sr != null) sr.color = originalColor;
+        isKnockedBack = false;
+    }
+
+
+    public void Heal(int amount)
+    {
+        if (isDead) return;
+        
+        currentHealth += amount;
+        currentHealth = Mathf.Clamp(currentHealth, 0, maxHealth);
+        if (GameManager.Instance != null)
+            GameManager.Instance.UpdateHP(currentHealth, maxHealth);
+    }
+
 
     void Die()
     {
