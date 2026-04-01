@@ -58,8 +58,16 @@ public class AudioManager : MonoBehaviour
 
     void Start()
     {
-        AutoLoadClips();
+        // Trong bản build, AutoLoadClips không chạy. 
+        // Dữ liệu được gán sẵn qua OnValidate trong Editor.
         PlayBGM();
+    }
+
+    private void OnValidate()
+    {
+#if UNITY_EDITOR
+        AutoLoadClips();
+#endif
     }
 
     void AutoLoadClips()

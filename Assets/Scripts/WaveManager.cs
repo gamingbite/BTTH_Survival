@@ -48,10 +48,22 @@ public class WaveManager : MonoBehaviour
 
     void Start()
     {
+        // Trong bản build, các hàm AutoLoad sẽ không chạy (vì dùng AssetDatabase).
+        // Chúng ta dựa vào việc dữ liệu đã được gán sẵn qua OnValidate trong Editor.
         AutoFindSpawnPoints();
-        AutoLoadPrefabs();
         AutoFindUI();
         StartCoroutine(StartNextWave());
+    }
+
+    private void OnValidate()
+    {
+        // Hàm này tự động chạy mỗi khi bạn thay đổi gì đó trong Inspector hoặc lưu Script.
+        // Nó giúp "điền trước" các ô rỗng để dữ liệu được lưu vào bản Build.
+#if UNITY_EDITOR
+        AutoLoadPrefabs();
+        AutoFindSpawnPoints();
+        AutoFindUI();
+#endif
     }
 
     void AutoFindSpawnPoints()
